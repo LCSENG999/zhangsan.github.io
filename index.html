@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>岩土工程监测数据联动报表（0-72小时+阈值组合版）</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft Yahei", sans-serif;
+        }
+        body {
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .report-header {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .report-header h1 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        .control-box {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+        .threshold-box {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            border: 1px solid #eee;
+        }
+        .threshold-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .threshold-group label {
+            color: #2c3e50;
+            font-weight: 500;
+            font-size: 14px;
+        }
+        .threshold-group select {
+            padding: 6px 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            min-width: 120px;
+        }
+        .control-box label {
+            color: #666;
+            font-size: 14px;
+        }
+        .control-box select {
+            padding: 6px 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            min-width: 150px;
+        }
+        .control-box button {
+            padding: 8px 25px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .control-box button:hover {
+            background-color: #2980b9;
+        }
+        .module {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .module h2 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            border-left: 4px solid #3498db;
+            padding-left: 10px;
+        }
+        .chart-container {
+            width: 100%;
+            height: 550px;
+            margin-bottom: 15px;
+        }
+        .sub-chart {
+            width: 100%;
+            height: 450px;
+            margin-bottom: 15px;
+        }
+        .desc {
+            color: #666;
+            line-height: 1.6;
+            margin-top: 10px;
+        }
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        .data-table th, .data-table td {
+            border: 1px solid #ddd;
+            padding: 6px 4px;
+            text-align: center;
+            font-size: 12px;
+        }
+        .data-table th {
+            background-color: #f8f9fa;
+            color: #2c3e50;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        .data-table tr.highlight {
+            background-color: #fff3cd;
+        }
+        .table-container {
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 20px;
+            border: 1px solid #eee;
+        }
+    </style>
+</head>
+<body>
+    <div class="report-header">
+        <h1>岩土工程监测数据联动报表（0-72小时+阈值组合）</h1>
+        <div class="threshold-box">
+            <div class="threshold-group">
+                <label for="rain-level">降雨强度：</label>
+                <select id="rain-level">
+                    <option value="small" selected>小（峰值≤30mm/h）</option>
+                    <option value="medium">中（峰值30-50mm/h）</option>
+                    <option value="large">大（峰值≥50mm/h）</option>
+                </select>
+            </div>
+            <div class="threshold-group">
+                <label for="load-level">堆载压力：</label>
+                <select id="load-level">
+                    <option value="small" selected>小（最大≤20kPa）</option>
+                    <option value="medium">中（最大20-40kPa）</option>
+                    <option value="large">大（最大≥40kPa）</option>
+                </select>
+            </div>
+            <div class="threshold-group">
+                <label for="earthquake-level">地震影响：</label>
+                <select id="earthquake-level">
+                    <option value="none" selected>无（无额外影响）</option>
+                    <option value="small">小（弯矩+10%）</option>
+                    <option value="medium">中（弯矩+20%）</option>
+                    <option value="large">大（弯矩+30%）</option>
+                </select>
+            </div>
+        </div>
+        <div class="control-box">
+            <label for="time-filter">筛选时间段（默认展示全部）：</label>
+            <select id="time-filter">
+                <option value="all" selected>全部0-72小时</option>
+                <option value="0-12">0-12小时（弯矩平稳期）</option>
+                <option value="12-24">12-24小时（弯矩突变期）</option>
+                <option value="15-18">15-18小时（降雨-位移峰值期）</option>
+                <option value="24-72">24-72小时（持续变化期）</option>
+            </select>
+            <button id="random-btn">按阈值生成监测数据</button>
+        </div>
+    </div>
+
+    <div class="module">
+        <h2>1. 力学类传感器：支护桩弯矩突增（0-72小时+地震影响）</h2>
+        <div id="moment-chart" class="chart-container"></div>
+        <div class="table-container">
+            <table class="data-table" id="moment-table">
+                <thead>
+                    <tr>
+                        <th>时间（小时）</th>
+                        <th>桩身弯矩（kN·m）</th>
+                        <th>地震修正值（kN·m）</th>
+                        <th>状态说明</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <p class="desc">动画说明：曲线完整展示0-72小时支护桩弯矩变化，12小时处弯矩突增；<br>
+        地震影响：根据选择的地震等级，弯矩值会叠加10%-30%的额外增量；<br>
+        联动说明：点击图表任意时间点，表格和其他关联图表会高亮对应数据。</p>
+    </div>
+
+    <div class="module">
+        <h2>2. 位移类传感器：坡顶持续位移 + 降雨滞后分析（0-72小时）</h2>
+        <div id="rain-displacement" class="chart-container"></div>
+        <div class="table-container">
+            <table class="data-table" id="displacement-rain-table">
+                <thead>
+                    <tr>
+                        <th>时间（小时）</th>
+                        <th>水平位移（mm）</th>
+                        <th>竖向位移（mm）</th>
+                        <th>降雨强度（mm/h）</th>
+                        <th>位移速率（mm/h）</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <p class="desc">降雨对比说明：15小时暴雨峰值（大小随选择的降雨等级变化）、18小时位移峰值滞后3小时；<br>
+        位移规律：降雨等级越大，坡顶水平/竖向位移及位移速率越大，体现降雨对边坡稳定性的影响。</p>
+    </div>
+
+    <div class="module">
+        <h2>3. 环境监测：累计降雨+堆载 + 荷载-应力关系（0-72小时）</h2>
+        <div id="env-data" class="chart-container"></div>
+        <div id="load-stress" class="sub-chart"></div>
+        <div class="table-container">
+            <table class="data-table" id="env-load-table">
+                <thead>
+                    <tr>
+                        <th>时间（小时）</th>
+                        <th>累计降雨（mm）</th>
+                        <th>堆载压力（kPa）</th>
+                        <th>弯矩提升率（%）</th>
+                        <th>地震影响系数（%）</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <p class="desc">多源数据说明：累计降雨峰值、堆载压力最大值随选择的阈值等级变化；<br>
+        荷载-应力说明：弯矩提升率=堆载基础提升率+地震影响系数，混合体现多因素作用。</p>
+    </div>
+
+    <script>
+        let timeData, timeLabels;
+        let momentData, displacementRainData, envLoadData;
+        let momentChart, rainDisplacementChart, envChart, loadStressChart;
+        let currentHighlightHour = -1;
+
+        const thresholdConfig = {
+            rain: {
+                small: { peak: 20, maxTotal: 80 },
+                medium: { peak: 40, maxTotal: 150 },
+                large: { peak: 60, maxTotal: 220 }
+            },
+            load: {
+                small: { max: 20, rate: 20/72 },
+                medium: { max: 30, rate: 30/72 },
+                large: { max: 45, rate: 45/72 }
+            },
+            earthquake: {
+                none: { factor: 0, label: 0 },
+                small: { factor: 0.1, label: 10 },
+                medium: { factor: 0.2, label: 20 },
+                large: { factor: 0.3, label: 30 }
+            }
+        };
+
+        function initBaseConfig() {
+            timeData = Array.from({length: 73}, (_, i) => i);
+            timeLabels = timeData.map(h => `${h}h`);
+
+            momentChart = echarts.init(document.getElementById('moment-chart'));
+            rainDisplacementChart = echarts.init(document.getElementById('rain-displacement'));
+            envChart = echarts.init(document.getElementById('env-data'));
+            loadStressChart = echarts.init(document.getElementById('load-stress'));
+        }
+
+        function generateAllData() {
+            const rainLevel = document.getElementById('rain-level').value;
+            const loadLevel = document.getElementById('load-level').value;
+            const earthquakeLevel = document.getElementById('earthquake-level').value;
+            
+            const rainCfg = thresholdConfig.rain[rainLevel];
+            const loadCfg = thresholdConfig.load[loadLevel];
+            const earthquakeCfg = thresholdConfig.earthquake[earthquakeLevel];
+
+            momentData = timeData.map(hour => {
+                const baseValue = hour < 12 ? Math.random() * 20 + 40 : Math.random() * 30 + 150;
+                const earthquakeValue = baseValue * earthquakeCfg.factor;
+                const finalValue = parseFloat((baseValue + earthquakeValue).toFixed(1));
+                
+                return {
+                    hour,
+                    value: finalValue,
+                    earthquakeValue: parseFloat(earthquakeValue.toFixed(1)),
+                    status: hour < 12 ? "平稳" : "突变"
+                };
+            });
+
+            displacementRainData = timeData.map(hour => {
+                const dispBase = rainLevel === 'small' ? 10 : (rainLevel === 'medium' ? 15 : 20);
+                const disp = hour * dispBase / 72; 
+                const horizontalDisp = parseFloat(disp.toFixed(3));
+                const verticalDisp = parseFloat((disp * 0.8).toFixed(3));
+                
+                const rain = parseFloat(Math.exp(-Math.pow((hour - 15)/3, 2)) * rainCfg.peak).toFixed(2);
+                
+                const dispRateBase = Math.exp(-Math.pow((hour - 18)/3, 2)) * (rainLevel === 'large' ? 1.8 : (rainLevel === 'medium' ? 1.2 : 0.8));
+                const dispRate = parseFloat((dispRateBase + (dispBase/72) + (earthquakeCfg.factor * 0.1)).toFixed(3));
+                
+                return {
+                    hour,
+                    horizontalDisp,
+                    verticalDisp,
+                    rain,
+                    dispRate
+                };
+            });
+
+            envLoadData = timeData.map(hour => {
+                const totalRain = hour < 30 ? hour * (rainCfg.maxTotal / 30) : rainCfg.maxTotal;
+                const load = parseFloat((hour * loadCfg.rate).toFixed(1));
+                const baseStressRate = parseFloat((load / 10 * 15).toFixed(1));
+                const finalStressRate = parseFloat((baseStressRate + (baseStressRate * earthquakeCfg.factor)).toFixed(1));
+                
+                return {
+                    hour,
+                    totalRain: parseFloat(totalRain.toFixed(1)),
+                    load,
+                    stressRate: finalStressRate,
+                    earthquakeFactor: earthquakeCfg.label
+                };
+            });
+
+            filterDataByTime();
+        }
+
+        function filterDataByTime() {
+            const timeFilter = document.getElementById('time-filter').value;
+            let filteredTime = [...timeData];
+            let filteredLabels = [...timeLabels];
+
+            switch(timeFilter) {
+                case '0-12':
+                    filteredTime = timeData.filter(h => h >= 0 && h <= 12);
+                    filteredLabels = filteredTime.map(h => `${h}h`);
+                    break;
+                case '12-24':
+                    filteredTime = timeData.filter(h => h >= 12 && h <= 24);
+                    filteredLabels = filteredTime.map(h => `${h}h`);
+                    break;
+                case '15-18':
+                    filteredTime = timeData.filter(h => h >= 15 && h <= 18);
+                    filteredLabels = filteredTime.map(h => `${h}h`);
+                    break;
+                case '24-72':
+                    filteredTime = timeData.filter(h => h >= 24 && h <= 72);
+                    filteredLabels = filteredTime.map(h => `${h}h`);
+                    break;
+                default:
+                    break;
+            }
+
+            renderMomentModule(filteredTime, filteredLabels);
+            renderDisplacementRainModule(filteredTime, filteredLabels);
+            renderEnvLoadModule(filteredTime, filteredLabels);
+        }
+
+        function highlightHour(hour) {
+            currentHighlightHour = hour;
+            
+            document.querySelectorAll('.data-table tr').forEach(tr => tr.classList.remove('highlight'));
+            if (hour >= 0 && hour <= 72) {
+                document.querySelectorAll(`.data-table tr[data-hour="${hour}"]`).forEach(tr => tr.classList.add('highlight'));
+            }
+            
+            const markLineOpt = {
+                markLine: {
+                    symbol: ['none', 'none'],
+                    data: hour >= 0 && hour <= 72 ? [{ xAxis: `${hour}h`, lineStyle: { color: 'red', type: 'dashed', width: 2 } }] : [],
+                    animation: false
+                }
+            };
+
+            if (momentChart) momentChart.setOption({ series: [{ ...markLineOpt }] });
+            if (rainDisplacementChart) rainDisplacementChart.setOption({ 
+                series: [{ ...markLineOpt }, { ...markLineOpt }, { ...markLineOpt }, { ...markLineOpt }] 
+            });
+            if (envChart) envChart.setOption({ series: [{ ...markLineOpt }, { ...markLineOpt }] });
+            if (loadStressChart) loadStressChart.setOption({ series: [{ ...markLineOpt }] });
+        }
+
+        function renderMomentModule(filteredTime = timeData, filteredLabels = timeLabels) {
+            const filteredMoment = momentData.filter(item => filteredTime.includes(item.hour));
+            
+            const momentOption = {
+                title: { text: '支护桩弯矩随时间变化曲线（0-72小时+地震影响）', left: 'center' },
+                xAxis: { 
+                    type: 'category', 
+                    data: filteredLabels, 
+                    axisLabel: { interval: 2, rotate: 45, fontSize: 11 },
+                    axisTick: { interval: 2 }
+                },
+                yAxis: { type: 'value', name: '弯矩 (kN·m)', min: 0, max: 250 },
+                tooltip: { 
+                    trigger: 'axis', 
+                    formatter: (params) => {
+                        const hour = parseInt(params[0].name);
+                        const momentItem = momentData.find(item => item.hour === hour);
+                        return `${params[0].name} → 基础值：${momentItem.value - momentItem.earthquakeValue} kN·m<br/>地震修正值：${momentItem.earthquakeValue} kN·m<br/>最终值：${momentItem.value} kN·m`;
+                    }
+                },
+                series: [{
+                    name: '桩身弯矩（含地震）',
+                    type: 'line',
+                    data: filteredMoment.map(item => item.value),
+                    animation: true,
+                    animationDuration: 6000,
+                    animationEasing: 'cubicInOut',
+                    markPoint: {
+                        data: filteredTime.includes(12) ? [{ 
+                            name: '弯矩突增点(12h)', 
+                            value: `${momentData[12].value} kN·m`, 
+                            xAxis: '12h', 
+                            yAxis: momentData[12].value 
+                        }] : [],
+                        itemStyle: { color: 'red' }
+                    },
+                    lineStyle: { width: 3, color: '#e74c3c' },
+                    itemStyle: { color: '#e74c3c' }
+                }]
+            };
+            momentChart.setOption(momentOption);
+
+            momentChart.off('click');
+            momentChart.on('click', (params) => {
+                const hour = parseInt(params.name);
+                highlightHour(hour);
+            });
+
+            const momentTableBody = document.querySelector('#moment-table tbody');
+            momentTableBody.innerHTML = '';
+            momentData.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.dataset.hour = item.hour;
+                tr.innerHTML = `
+                    <td>${item.hour}h</td>
+                    <td>${item.value}</td>
+                    <td>${item.earthquakeValue}</td>
+                    <td>${item.status}</td>
+                `;
+                tr.addEventListener('click', () => highlightHour(item.hour));
+                momentTableBody.appendChild(tr);
+            });
+        }
+
+        function renderDisplacementRainModule(filteredTime = timeData, filteredLabels = timeLabels) {
+            const filteredDispRain = displacementRainData.filter(item => filteredTime.includes(item.hour));
+            
+            const rainDispOption = {
+                title: { text: '坡顶位移+降雨强度变化曲线（0-72小时）', left: 'center' },
+                xAxis: { 
+                    type: 'category', 
+                    data: filteredLabels, 
+                    axisLabel: { interval: 2, rotate: 45, fontSize: 11 },
+                    axisTick: { interval: 2 }
+                },
+                yAxis: [
+                    { type: 'value', name: '位移 (mm)', min: 0, max: 25 },
+                    { type: 'value', name: '降雨强度 (mm/h)', min: 0, max: 70, position: 'right' },
+                    { type: 'value', name: '位移速率 (mm/h)', min: 0, max: 2, position: 'right', offset: 80 }
+                ],
+                tooltip: { trigger: 'axis' },
+                series: [
+                    {
+                        name: '水平位移',
+                        type: 'line',
+                        yAxisIndex: 0,
+                        data: filteredDispRain.map(item => item.horizontalDisp),
+                        lineStyle: { width: 3, color: '#3498db' },
+                        itemStyle: { color: '#3498db' },
+                        markPoint: {
+                            data: filteredTime.includes(18) ? [{ 
+                                name: '位移峰值(18h)', 
+                                value: `${displacementRainData[18].horizontalDisp} mm`, 
+                                xAxis: '18h', 
+                                yAxis: displacementRainData[18].horizontalDisp 
+                            }] : [],
+                            itemStyle: { color: '#3498db' }
+                        }
+                    },
+                    {
+                        name: '竖向位移',
+                        type: 'line',
+                        yAxisIndex: 0,
+                        data: filteredDispRain.map(item => item.verticalDisp),
+                        lineStyle: { width: 2, color: '#9b59b6', type: 'dashed' },
+                        itemStyle: { color: '#9b59b6' }
+                    },
+                    {
+                        name: '降雨强度',
+                        type: 'line',
+                        yAxisIndex: 1,
+                        data: filteredDispRain.map(item => item.rain),
+                        lineStyle: { width: 3, color: '#2ecc71' },
+                        itemStyle: { color: '#2ecc71' },
+                        markPoint: {
+                            data: filteredTime.includes(15) ? [{ 
+                                name: '降雨峰值(15h)', 
+                                value: `${displacementRainData[15].rain} mm/h`, 
+                                xAxis: '15h', 
+                                yAxis: displacementRainData[15].rain 
+                            }] : [],
+                            itemStyle: { color: '#2ecc71' }
+                        }
+                    },
+                    {
+                        name: '位移速率',
+                        type: 'line',
+                        yAxisIndex: 2,
+                        data: filteredDispRain.map(item => item.dispRate),
+                        lineStyle: { width: 2, color: '#f39c12' },
+                        itemStyle: { color: '#f39c12' }
+                    }
+                ]
+            };
+            rainDisplacementChart.setOption(rainDispOption);
+
+            rainDisplacementChart.off('click');
+            rainDisplacementChart.on('click', (params) => {
+                const hour = parseInt(params.name);
+                highlightHour(hour);
+            });
+
+            const dispTableBody = document.querySelector('#displacement-rain-table tbody');
+            dispTableBody.innerHTML = '';
+            displacementRainData.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.dataset.hour = item.hour;
+                tr.innerHTML = `
+                    <td>${item.hour}h</td>
+                    <td>${item.horizontalDisp}</td>
+                    <td>${item.verticalDisp}</td>
+                    <td>${item.rain}</td>
+                    <td>${item.dispRate}</td>
+                `;
+                tr.addEventListener('click', () => highlightHour(item.hour));
+                dispTableBody.appendChild(tr);
+            });
+        }
+
+        function renderEnvLoadModule(filteredTime = timeData, filteredLabels = timeLabels) {
+            const filteredEnvLoad = envLoadData.filter(item => filteredTime.includes(item.hour));
+            
+            const envOption = {
+                title: { text: '累计降雨+堆载压力变化曲线（0-72小时）', left: 'center' },
+                xAxis: { 
+                    type: 'category', 
+                    data: filteredLabels, 
+                    axisLabel: { interval: 2, rotate: 45, fontSize: 11 },
+                    axisTick: { interval: 2 }
+                },
+                yAxis: [
+                    { type: 'value', name: '累计降雨 (mm)', min: 0, max: 250 },
+                    { type: 'value', name: '堆载压力 (kPa)', min: 0, max: 50, position: 'right' }
+                ],
+                tooltip: { trigger: 'axis' },
+                series: [
+                    {
+                        name: '累计降雨',
+                        type: 'line',
+                        yAxisIndex: 0,
+                        data: filteredEnvLoad.map(item => item.totalRain),
+                        lineStyle: { width: 3, color: '#1abc9c' },
+                        itemStyle: { color: '#1abc9c' }
+                    },
+                    {
+                        name: '堆载压力',
+                        type: 'line',
+                        yAxisIndex: 1,
+                        data: filteredEnvLoad.map(item => item.load),
+                        lineStyle: { width: 3, color: '#e67e22' },
+                        itemStyle: { color: '#e67e22' }
+                    }
+                ]
+            };
+            envChart.setOption(envOption);
+
+            const loadStressOption = {
+                title: { text: '堆载压力-弯矩提升率关系（0-72小时）', left: 'center' },
+                xAxis: { 
+                    type: 'category', 
+                    data: filteredLabels, 
+                    axisLabel: { interval: 2, rotate: 45, fontSize: 11 },
+                    axisTick: { interval: 2 }
+                },
+                yAxis: [
+                    { type: 'value', name: '堆载压力 (kPa)', min: 0, max: 50 },
+                    { type: 'value', name: '弯矩提升率 (%)', min: 0, max: 100, position: 'right' }
+                ],
+                tooltip: { trigger: 'axis' },
+                series: [
+                    {
+                        name: '堆载压力',
+                        type: 'bar',
+                        yAxisIndex: 0,
+                        data: filteredEnvLoad.map(item => item.load),
+                        itemStyle: { color: '#34495e' }
+                    },
+                    {
+                        name: '弯矩提升率',
+                        type: 'line',
+                        yAxisIndex: 1,
+                        data: filteredEnvLoad.map(item => item.stressRate),
+                        lineStyle: { width: 3, color: '#e74c3c' },
+                        itemStyle: { color: '#e74c3c' }
+                    }
+                ]
+            };
+            loadStressChart.setOption(loadStressOption);
+
+            envChart.off('click');
+            envChart.on('click', (params) => {
+                const hour = parseInt(params.name);
+                highlightHour(hour);
+            });
+
+            loadStressChart.off('click');
+            loadStressChart.on('click', (params) => {
+                const hour = parseInt(params.name);
+                highlightHour(hour);
+            });
+
+            const envTableBody = document.querySelector('#env-load-table tbody');
+            envTableBody.innerHTML = '';
+            envLoadData.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.dataset.hour = item.hour;
+                tr.innerHTML = `
+                    <td>${item.hour}h</td>
+                    <td>${item.totalRain}</td>
+                    <td>${item.load}</td>
+                    <td>${item.stressRate}</td>
+                    <td>${item.earthquakeFactor}</td>
+                `;
+                tr.addEventListener('click', () => highlightHour(item.hour));
+                envTableBody.appendChild(tr);
+            });
+        }
+
+        window.onload = function() {
+            initBaseConfig();
+            generateAllData();
+            
+            document.getElementById('random-btn').addEventListener('click', generateAllData);
+            document.getElementById('time-filter').addEventListener('change', filterDataByTime);
+        };
+
+        window.onresize = function() {
+            momentChart.resize();
+            rainDisplacementChart.resize();
+            envChart.resize();
+            loadStressChart.resize();
+        };
+    </script>
+</body>
+</html>
